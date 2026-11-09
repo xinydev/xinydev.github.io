@@ -1,0 +1,56 @@
+name: Update contribution data
+
+on:
+  schedule:
+    - cron: "0 2 * * *"         # daily at 02:00 UTC (10:00 Beijing)
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [index.html, scripts/**]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect upstream commits
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/collect.py
+
+      - name: Commit refreshed data
+        run: |
+          git add data.json data.js
+          if git diff --cached --quiet; then
+            echo "Contribution data is unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: refresh contribution data $(date -u +%F)"
+          git push
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+  deploy:
+    needs: update
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
